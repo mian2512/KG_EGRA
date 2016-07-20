@@ -72,6 +72,7 @@ lab var fw_permin "Familiar Words"
 order fw_permin , after(fw_correct) 
 *Replacing to zero fw score for students who were stopped early 
 replace fw_permin = 0 if fwsto1==1 &    I_stop_err_fw==0 
+replace fw_correct = 0 if fwsto1==1 &    I_stop_err_fw==0 
 
 br fw* if fwsto1==1 & I_stop_err_fw==0   //6 students were correctly stopped early 
 br fw* if fwsto1==1 & I_stop_err_fw==1   //3 students were incorrectly stopped 
@@ -89,8 +90,7 @@ tab I_stop_err_ufw ufwst1 , m
 br ufw*  if ufwst1==1  &  I_stop_err_ufw==0  //15 students  were correctly stopped
 br ufw*  if ufwst1==1  &  I_stop_err_ufw==1 //4 students  were incorrectly stopped 
 	
-
-*Recoding minutes to seconds
+*Recoding minutes to seconds	
 tab  ufwti1
 
 
@@ -120,11 +120,10 @@ lab var ufw_permin "Nonsense Words"
 order ufw_permin , after(ufw_correct) 
 *Replacing to zero ufw score for students who were stopeed early 
 replace ufw_permin = 0 if ufwst1==1 &  I_stop_err_ufw==0 
+replace ufw_correct = 0 if ufwst1==1 &  I_stop_err_ufw==0 
 
 br ufw*  if ufwst1==1  &  I_stop_err_ufw==0  //15 students  were correctly stopped
 br ufw*  if ufwst1==1  &  I_stop_err_ufw==1 //4 students  were incorrectly stopped 
-
-
 
 *Passage Reading Score
 **********************
@@ -142,10 +141,8 @@ lab var I_stop_err_rp "Incorrectly stopped early in Passage Reading Section"
 order I_stop_err_rp , after(rpsto1) 
 tab  I_stop_err_rp rpsto1
 
-
 br rp* if rpsto1==1 &  I_stop_err_rp==0  // 6 students who were correctly stopped early
 br rp* if rpsto1==1 &  I_stop_err_rp==1  // 7 students who were incorrectly stopped early
-
 
 *Creating a reading passage score 
 cap drop rp_string 
@@ -174,12 +171,14 @@ lab var rp_permin "Reading Passage"
 order rp_permin , after(rp_correct) 
 *replacing rp score for students who were incorrectly stopped 
 replace rp_permin = 0 if rpsto1==1 & I_stop_err_rp==0
-
+replace rp_correct = 0 if rpsto1==1 & I_stop_err_rp==0
 
 br rp* if rpsto1==1 &  I_stop_err_rp==0  // 6 students who were correctly stopped early
 br rp* if rpsto1==1 &  I_stop_err_rp==1  // 7 students who were incorrectly stopped early
-
  
+
+*2) Percentage Score Variables
+******************************  
 *Oral Vocab 
 br ov1-ov10
 des ov1-ov10
@@ -210,6 +209,7 @@ cap drop ov_score
 gen ov_score = (total_ov_correct/10)*100
 order ov_score , after(total_ov_correct) 
 la var ov_score "Oral Vocabulary"	
+
 
 *Reading Comprehension 
 **********************
@@ -307,6 +307,14 @@ la var dct_score "Dictation"
 ******************
 des  fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct_score 
 
+foreach var of varlist fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct_score {
+  egen `var'_sd = std(`var') 
+  sum `var'_sd, d 
+  replace `var' =. if `var'_sd>= 3 
+}
+*
+
+/*
 *Flag observations that are 3 Standard Deviation Away 
 foreach var of varlist   fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct_score  {
 	cap drop `var'_sd
@@ -322,15 +330,13 @@ foreach var of varlist   fw_permin ufw_permin rp_permin ov_score rpc_score lc_sc
  }
  *
  cap drop sd_flags
- gen sd_flags=  fw_permin_flag+ ufw_permin_flag+ rp_permin_flag+ ov_score_flag+ rpc_score_flag+ dct_score_flag+ lc_score_flag
+ gen sd_flags=  fw_permin_flag+ ufw_permin_flag+ rp_permin_flag+ ov_score_flag +rpc_score_flag  + dct_score_flag+ lc_score_flag
  tab sd_flags  //20 outliers
  
-*tab Overall_Any_Error // this is the time error flag for a kid who has any time error on any timed subtest
  
  
- *drop if sd_flags!=0 | Overall_Any_Error==1
- drop if sd_flags!=0   //20 outliers are dropped 
+drop if sd_flags!=0   //20 outliers are dropped 
 
-
+*/
  
 

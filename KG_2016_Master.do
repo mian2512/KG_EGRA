@@ -240,19 +240,9 @@ tabstat lp_permin fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct
 
 
 
-
-
-*Cleaning ID {Amy}
-******************
-
-/*
-
-/*********************
-Create student ID*/
-
-
+*Cleaning ID and Create student ID by Amy T
+*******************************************
 *make right digits= district2, school3, student2
-
 gen str2 District = string(district,"%02.0f")
 gen str3 School = string(school,"%03.0f")
 gen str2 Student = string(student,"%02.0f")
@@ -260,24 +250,37 @@ gen str2 Student = string(student,"%02.0f")
 tostring region grade, replace
 
 gen StudentID="1"+ region+District+School+grade+section+Student
-unique StudentID // 2760 records, 2787 unique
+unique StudentID // 2728 records, 2723 unique
+cap drop dup_ID
 duplicates tag StudentID, gen(dup_ID)
 sort StudentID
-*br StudentID if dup>0
+br StudentID if dup_ID>0
 
+cap drop SchoolID
 gen SchoolID="1"+ region+District+School
-unique SchoolID // 2787 records, 95 unique
-tab SchoolID
+unique SchoolID // 2728 records, 95 unique
 
 merge m:1 SchoolID using "H:\ECA Region Projects\QRP Central Asia-D3452\Technical\Data\2016 KG EGRA\KG2016sample.dta"
-*/ 
+
+/*
+	31 observations do not have a school id 
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                            31
+        from master                        31  (_merge==1)  --------- Observation from master that do not have a school id 
+        from using                          0  (_merge==2)
+
+    matched                             2,697  (_merge==3)
+    -----------------------------------------
+
+*/
+
+tab SchoolID _m
 
 
-
-
-
-
-
+destring grade , replace
+*Saving cleaned data
+********************
 save "${wdata}\KG_2016_allgrades_appended.dta" , replace 
 saveold "${wdata}\KG_2016_allgrades_appended.dta" , replace   //saving to stata 13 
 

@@ -24,12 +24,10 @@ use "${data}\KG_2016_R4(Final).dta" , clear   // Russian Grade 4
 
 tab grade, m //clean, only 4th
 tab lang, m // clean, only R
-
  
 
 *Cleaning and creating variables 
 ********************************
-
 *Familiar Word 
 **************
 br fw1-fwsto1
@@ -60,7 +58,6 @@ egen fw_23 = concat(fwtim2 fwtim3)
 order fw_23 , after(fwtim3) 
 destring fw_23 , replace 
 
-
 cap drop fw_time_used
 gen fw_time_used = fwtim1+ fw_23
 order fw_time_used , after(fw_23) 
@@ -68,11 +65,6 @@ order fw_time_used , after(fw_23)
 sort fw_time_used
 br fwtim1 fwtim2 fwtim3 fw_23 fw_time_used 
 
-
-br fw1-fw40 fw_time_used fwsto1 if fwsto1==1 //childredn who were stoped ealy 
-*There are 3 students who were stopped early
-*They got the first 10 questions incorrect and they used about 19-25 seconds before they were spotted 
-*How do you want to code these observations 
 
 
 *Creating a familiar word score 
@@ -100,49 +92,38 @@ order fw_permin , after(fw_correct)
 order fw_permin , after(fw_correct) 
 *Replacing to zero fw score for students who were stopped early 
 replace fw_permin = 0 if fwsto1==1 &    I_stop_err_fw==0 
+replace fw_correct = 0 if fwsto1==1 &    I_stop_err_fw==0 
 
 br fw* if fwsto1==1 & I_stop_err_fw==0   //2 students were correctly stopped early 
 br fw* if fwsto1==1 & I_stop_err_fw==1   //1 students were incorrectly stopped 
 
 *Creating a nonesense word score 
 br ufw1-ufwst1
-
 tab ufwst1
 
 cap drop I_stop_err_ufw 
 gen I_stop_err_ufw = (ufwst1 ==1 & (ufw1==0 | ufw2==0| ufw3==0| ufw4==0| ufw5==0| ufw6==0 | ufw7==0 | ufw8 ==0 | ufw9==0 | ufw10==0))
 lab var I_stop_err_ufw "Incorrectly stopped early in Nonesense Word Section" 
 order I_stop_err_ufw , after(ufwst1)
-tab I_stop_err_ufw ufwst1 , m
+tab  ufwst1 I_stop_err_ufw , m
 
 br ufw*  if ufwst1==1  &  I_stop_err_ufw==0  //8 students  were correctly stopped
-	
 
-br ufw* if ufwst1==1 
-tab ufwst1 fwsto1, m  //5 new students were stopped early 
-
-*There are 8 students who were stopped early
-*They got the first 10 questions incorrect 
-*How do you want to code these observations 
 
 *Recoding minutes to seconds
 br ufwti1 ufwti2 ufwti3
 sort ufwti1 ufwti2 ufwti3
-tab ufwti1 , m  //one value has -1  
-tab ufwti2 , m  //one value has -1  
-tab  ufwti3 , m   //one value has -1  
-br ufw* if ufwti1== -1 | ufwti2== -1 | ufwti3== -1 //2 observations have -1 time used 
+tab ufwti1 , m   
+tab ufwti2 , m  
+tab  ufwti3 , m   
 
 
 replace ufwti1= ufwti1* 60 //replacing minutes to seconds 
-recode  ufwti1 (-60=.) 
-tab ufwti1
+tab ufwti1 ,m
 
 *Combining fwtim2 and fwtim3 variable into one variable 
 cap drop ufw_23
-recode ufwti2 (-1 =0)
 recode ufwti2 (. =0)
-recode ufwti3 (-1=0) 
 recode ufwti3 (.=0) 
 
 egen ufw_23 = concat(ufwti2 ufwti3) 
@@ -181,12 +162,10 @@ lab var ufw_permin "Nonsense Words"
 order ufw_permin , after(ufw_correct) 
 *Replacing to zero ufw score for students who were stopeed early 
 replace ufw_permin = 0 if ufwst1==1 &  I_stop_err_ufw==0 
+replace ufw_correct = 0 if ufwst1==1 &  I_stop_err_ufw==0 
 
 br ufw*  if ufwst1==1  &  I_stop_err_ufw==0  //15 students  were correctly stopped
 br ufw*  if ufwst1==1  &  I_stop_err_ufw==1 //4 students  were incorrectly stopped 
-
-
-
 
 
 *Passage Reading Score
@@ -208,11 +187,6 @@ tab  I_stop_err_rp rpsto1
 
 br rp* if rpsto1==1 &  I_stop_err_rp==0  // 11 students were correctly stopped early
 br rp* if rpsto1==1 &  I_stop_err_rp==1  // 1 students was incorrectly stopped early
-
-
-*There are 12 students who were stopped early
-*They got the first 10 questions incorrect 
-*How do you want to code these observations 
 
 
 *Creating a reading passage score 
@@ -240,9 +214,16 @@ cap drop rp_permin
 gen rp_permin = (rp_correct / rptim1) *60
 lab var rp_permin "Reading Passage"
 order rp_permin , after(rp_correct) 
+*replacing rp score for students who were incorrectly stopped 
+replace rp_permin = 0 if rpsto1==1 & I_stop_err_rp==0
+replace rp_correct = 0 if rpsto1==1 & I_stop_err_rp==0
+
+br rp* if rpsto1==1 &  I_stop_err_rp==0  // 6 students who were correctly stopped early
+br rp* if rpsto1==1 &  I_stop_err_rp==1  // 7 students who were incorrectly stopped early
 
 
-
+*2) Percentage Score Variables
+******************************  
 *Oral Vocab 
 br ov1-ov10
 des ov1-ov10
@@ -267,6 +248,7 @@ cap drop ov_score
 gen ov_score = (total_ov_correct/10)*100
 order ov_score , after(total_ov_correct) 
 la var ov_score "Oral Vocabulary"	
+
 
 *Reading Comprehension 
 **********************
@@ -353,6 +335,14 @@ la var dct_score "Dictation"
 ******************
 des  fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct_score 
 
+foreach var of varlist fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct_score  {
+  egen `var'_sd = std(`var') 
+  sum `var'_sd, d 
+  replace `var' =. if `var'_sd>= 3 
+}
+*
+
+/*
 *Flag observations that are 3 Standard Deviation Away 
 foreach var of varlist   fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct_score  {
 	cap drop `var'_sd
@@ -368,16 +358,12 @@ foreach var of varlist   fw_permin ufw_permin rp_permin ov_score rpc_score lc_sc
  }
  *
  cap drop sd_flags
- gen sd_flags=  fw_permin_flag+ ufw_permin_flag+ rp_permin_flag+ ov_score_flag+ rpc_score_flag+ dct_score_flag+ lc_score_flag
+ gen sd_flags=  fw_permin_flag+ ufw_permin_flag+ rp_permin_flag+ ov_score_flag  + rpc_score_flag+ dct_score_flag+ lc_score_flag
  order sd_flags, after(dct_score_flag)
  tab sd_flags  //10 outliers 
  
-*tab Overall_Any_Error // this is the time error flag for a kid who has any time error on any timed subtest
- 
- 
- *drop if sd_flags!=0 | Oveall_Any_Error==1
  drop if sd_flags!=0  //10 observations are dropped 
-
+*/
 
 *Dropping variables that we no longer need 
 drop  ufw_23 fw_23
