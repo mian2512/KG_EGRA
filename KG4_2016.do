@@ -33,20 +33,36 @@ use "${data}\KG_2016_K4(Final).dta"  , clear   // Russian Grade 4
 br fw1-fwsto1
 tab fwsto1 , m //checking stopping variable 
  
+br fw* if fwsto1==1  //these students look like they should all have a score of zero
 	
-*Creating an indicator for students who were incorrectly stopped ealy in this section 
-cap drop I_stop_err_fw
-gen I_stop_err_fw = (fwsto1==1 & (fw1 ==0 | fw2 == 0 | fw3==0 | fw4==0 |fw5==0 |fw6==0 |fw7==0 |fw8==0 |fw9==0|fw10==0) ) 
-lab var I_stop_err_fw  "Incorrectly stopped early in Familiar Word Section" 
-order I_stop_err_fw , after(fwsto1) 
-tab fwsto1 I_stop_err_fw, m
-
-br fw* if fwsto1==1 & I_stop_err_fw==0   //6 students were correctly stopped early 
-br fw* if fwsto1==1 & I_stop_err_fw==1   //3 students were incorrectly stopped 
-
-
 *Creating total_time used variable in seconds 
 tab fwtim1 //3 students used 0 seconds, this is a mistake 
+***Amy, I have made the changes below to address the above problem 
+******************************************************************
+sort fwtim1
+br fwtim1
+cap drop _fwtim1
+gen _fwtim1 = fwtim1
+order _fwtim1 , after(fwtim1) 
+tostring _fwtim1 , replace
+cap drop x
+gen x = strlen(_fwtim1) 	
+cap drop y 
+gen y = substr(_fwtim1,1,1) if strlen(_fwtim1)==3
+destring y , replace
+replace y = y * 60 
+
+cap drop z
+gen z = substr(_fwtim1,2,.) if strlen(_fwtim1)==3
+destring z , replace
+cap drop fw_time_used
+gen fw_time_used = y+ z 
+replace fw_time_used = fwtim1 if fw_time_used==. 
+order fw_time_used , after(fwtim1)
+
+drop x y z _fwtim1
+tab fw_time_used
+*****************
 
 *Creating a familiar word score 
 cap drop fw_string 
@@ -59,6 +75,35 @@ egen fwt_string = concat(tfw1 tfw2 tfw3 tfw4 tfw5 tfw6 tfw7 tfw8 tfw9 tfw10 tfw1
 order  fwt_string , after(fw_string) 
 br fwt_string fw_string
 
+	*Cleaning time string variable. There should only be 2 stops: one at minute 1 and another one at minute 2
+	*********************************************************************************************************
+	cap drop timeerror
+	egen timeerror = noccur(fwt_string) , string(1) 
+	tab timeerror
+	br fw* if timeerror==3  //observations with more than 2 stops 
+	*Creating an indicator for error in timed variable
+	/*
+	*Note: The following rules should always be followed 
+		1) Students who used less than 60secods should NOT have a "1" on their time string 
+		2) Students who fineshed the test between 60 seconds and 120 seconds shoul have ONE "1" 
+		3) Students who finished the test in 120 seconds should have 2 "1" 
+	*/
+	
+	cap drop fw_timeerror 
+	gen fw_timeerror = ((fw_time_used < 60 & timeerror !=0) | (fw_time_used >=60  & fw_time_used <120 & timeerror !=1) | ( fw_time_used >= 120 & timeerror !=2)   ) 
+	tab fw_timeerror	
+	br fw* if fw_timeerror==1 
+	
+	*Amy, can you decide how you want to clean these variables?
+	***********************************************************
+	
+	/*We then need to change the time time string variable here to have at most 2 "1"
+		
+	
+	
+	*/
+		
+
 cap drop fw_correct 
 egen fw_correct = noccur(fw_string) , string(0)  //counting the number of correct words student got for familiar word subtask
 order fw_correct , after( fwt_string) 
@@ -67,31 +112,89 @@ sort fw_correct
 *Estimating per minute score, 
 *Formula: (Total Correct / Time Used)*60
 cap drop fw_permin
-gen fw_permin = (fw_correct / fwtim1) *60
+gen fw_permin = (fw_correct / fw_time_used) *60
 lab var fw_permin "Familiar Words"	
 order fw_permin , after(fw_correct) 
 *Replacing to zero fw score for students who were stopped early 
-replace fw_permin = 0 if fwsto1==1 &    I_stop_err_fw==0 
-replace fw_correct = 0 if fwsto1==1 &    I_stop_err_fw==0 
+replace fw_permin = 0 if fwsto1==1
+replace fw_correct = 0 if fwsto1==1 
 
-br fw* if fwsto1==1 & I_stop_err_fw==0   //6 students were correctly stopped early 
-br fw* if fwsto1==1 & I_stop_err_fw==1   //3 students were incorrectly stopped 
+br fw* if fwsto1==1  
 
-*Creating a nonesense word score 
+
+*Amy, I am fixing the issue with students who used the full 2 minutes to finish 
+*******************************************************************************
+br fw* if fw_time_used >=120
+*Recalculating the scores of students who were stopped (students who used all of the 120 seconds allocated for the test) 
+************************************************************************************************************************
+*First, from time string, let's find the possition at which the second minute was marked 
+/* Stata 14 only 
+cap drop minute2 
+gen minute2 =  strrpos(fwt_string , "1") if fw_time_used >=120  //getting the question number the students last attempted when time expired
+tab minute2
+*/ 
+
+*Stata 13 equivalent of the function strrpos 
+cap drop minute2 
+gen minute2 =  strlen(fwt_string)-strpos(strreverse(fwt_string),"1")+1  if fw_time_used >=120  //getting the item number student last attempted  
+replace minute2= 0 if strpos(fwt_string,"1") ==0 // students who do not have a check on their time string when 2 minutes elapsed 
+
+
+
+br fw* minute2 fw_time_used if fw_time_used >=120
+cap drop fw_string2
+gen fw_string2 = substr(fw_string, 1, minute2) if fw_time_used >=120  //creating a response string from the first question to the last question student attempted when time expired
+order fw_string2 , after(fw_string) 
+*Counting the number of correct items for students who used 2 minutes
+********************************************************************
+cap drop fw_correct2
+egen fw_correct2 = noccur(fw_string2) , string(0)  //counting the number of correct words student got for familiar word subtask
+order fw_correct2 , after(fw_correct) 
+br fw_string fw_string2 fw_correct fw_correct2 fw_permin if fw_time_used >=120
+replace fw_permin = (fw_correct2 / fw_time_used) *60  if fw_time_used >=120  //replacing the per minute score for those students who used 2 minutes 
+
+*Amy, I am replacing to 0 the scores of students who took a full 2 minutes to finish the test but only attempted 10 questions at most 
+br fw_string fw_string2 fw_correct fw_correct2 fw_permin  fw_time_used  if minute2 <=10  // We do not have this problem 
+replace fw_permin = 0 if minute2 <=10  
+
+
+*Creating a nonesense word score
+********************************* 
 br ufw1-ufwst1
 
+*Early stop 
 tab ufwst1
-cap drop I_stop_err_ufw 
-gen I_stop_err_ufw = (ufwst1 ==1 & (ufw1==0 | ufw2==0| ufw3==0| ufw4==0| ufw5==0| ufw6==0 | ufw7==0 | ufw8 ==0 | ufw9==0 | ufw10==0))
-lab var I_stop_err_ufw "Incorrectly stopped early in Nonesense Word Section" 
-order I_stop_err_ufw , after(ufwst1)
-tab I_stop_err_ufw ufwst1 , m
+br ufw*  if ufwst1==1    //19 students  were correctly stopped
 
-br ufw*  if ufwst1==1  &  I_stop_err_ufw==0  //15 students  were correctly stopped
-br ufw*  if ufwst1==1  &  I_stop_err_ufw==1 //4 students  were incorrectly stopped 
 	
 *Recoding minutes to seconds	
 tab  ufwti1
+***Amy, I have made the changes below to address the above problem 
+******************************************************************
+sort ufwti1
+br ufwti1
+cap drop _ufwti1
+gen _ufwti1 = ufwti1
+order _ufwti1 , after(ufwti1) 
+tostring _ufwti1 , replace
+cap drop x
+gen x = strlen(_ufwti1) 	
+cap drop y 
+gen y = substr(_ufwti1,1,1) if strlen(_ufwti1)==3
+destring y , replace
+replace y = y * 60 
+
+cap drop z
+gen z = substr(_ufwti1,2,.) if strlen(_ufwti1)==3
+destring z , replace
+cap drop ufw_time_used
+gen ufw_time_used = y+ z 
+replace ufw_time_used = ufwti1 if ufw_time_used==. 
+order ufw_time_used , after(ufwti1)
+
+drop x y z _ufwti1
+tab ufw_time_used
+*****************
 
 
 *Creating a nonesence  word score 
@@ -105,7 +208,36 @@ egen ufwt_string = concat(tufw1 tufw2 tufw3 tufw4 tufw5 tufw6 tufw7 tufw8 tufw9 
 							tufw31 tufw32 tufw33 tufw34 tufw35 tufw36 tufw37 tufw38 tufw39 tufw40)
 order  ufwt_string , after(ufw_string) 
 br ufwt_string ufw_string
+	*Cleaning time string variable. There should only be 2 stops: one at minute 1 and another one at minute 2
+	*********************************************************************************************************
+	cap drop timeerror
+	egen timeerror = noccur(ufwt_string) , string(1) 
+	tab timeerror
+	br ufw* if timeerror==3  //observations with more than 2 stops 
 
+	*Creating an indicator for error in timed variable
+	/*
+	*Note: The following rules should always be followed 
+		1) Students who used less than 60secods should NOT have a "1" on their time string 
+		2) Students who fineshed the test between 60 seconds and 120 seconds shoul have ONE "1" 
+		3) Students who finished the test in 120 seconds should have 2 "1" 
+	*/
+
+	cap drop ufw_timeerror 
+	gen ufw_timeerror = ((ufw_time_used < 60 & timeerror !=0) | (ufw_time_used >=60  & ufw_time_used <120 & timeerror !=1) | ( ufw_time_used >= 120 & timeerror !=2)   ) 
+	tab ufw_timeerror	
+	br ufw* if ufw_timeerror==1 
+	
+	*Amy, can you decide how you want to clean these variables?
+	***********************************************************
+	
+	/*We then need to change the time time string variable here to have at most 2 "1"
+		
+		
+	*/
+		
+
+		**************
 cap drop ufw_correct 
 egen ufw_correct = noccur(ufw_string) , string(0)  //counting the number of correct words student got for familiar word subtask
 order ufw_correct , after( ufwt_string) 
@@ -119,11 +251,45 @@ gen ufw_permin = (ufw_correct / ufwti1) *60
 lab var ufw_permin "Nonsense Words"
 order ufw_permin , after(ufw_correct) 
 *Replacing to zero ufw score for students who were stopeed early 
-replace ufw_permin = 0 if ufwst1==1 &  I_stop_err_ufw==0 
-replace ufw_correct = 0 if ufwst1==1 &  I_stop_err_ufw==0 
+replace ufw_permin = 0 if ufwst1==1 
+replace ufw_correct = 0 if ufwst1==1 
 
-br ufw*  if ufwst1==1  &  I_stop_err_ufw==0  //15 students  were correctly stopped
-br ufw*  if ufwst1==1  &  I_stop_err_ufw==1 //4 students  were incorrectly stopped 
+br ufw*  if ufwst1==1  //score  of teh students who were stopped early 
+
+*Amy, I am fixing the issue with students who used the full 2 minutes to finish 
+*******************************************************************************
+br ufw* if ufw_time_used >=120
+
+	*Recalculating the scores of students who were stopped (students who used all of the 120 seconds allocated for the test) 
+	************************************************************************************************************************
+	*First, from time string, let's find the possition at which the second minute was marked 
+	/* Stata 14 only 
+	cap drop minute2 
+	gen minute2 =  strrpos(ufwt_string , "1") if ufw_time_used >=120  //getting the number of questions the student last attempted
+	tab minute2
+	*/
+	
+	*Stata 13 equivalent of the function strrpos 
+	cap drop minute2 
+	gen minute2 =  strlen(ufwt_string)-strpos(strreverse(ufwt_string),"1")+1  if ufw_time_used >=120  //getting the item number student last attempted  
+	replace minute2= 0 if strpos(ufwt_string,"1") ==0 // students who do not have a check on their time string when 2 minutes elapsed 
+
+br ufw* minute2 ufw_time_used if ufw_time_used >=120
+cap drop ufw_string2
+gen ufw_string2 = substr(ufw_string, 1, minute2) if ufw_time_used >=120
+order ufw_string2 , after(ufw_string) 
+*Counting the number of correct items for students who used 2 minutes
+********************************************************************
+cap drop ufw_correct2
+egen ufw_correct2 = noccur(ufw_string2) , string(0)  //counting the number of correct words student got for familiar word subtask
+order ufw_correct2 , after(ufw_correct) 
+br ufw_string ufw_string2 ufw_correct ufw_correct2 ufw_permin if ufw_time_used >=120
+replace ufw_permin = (ufw_correct2 / ufw_time_used) *60  if ufw_time_used >=120  //replacing the per minute score for those students who used 2 minutes 
+
+*Amy, I am replacing to 0 the scores of students who took a full 2 minutes to finish the test but only attempted 10 questions at most 
+br ufw_string ufw_string2 ufw_correct ufw_correct2 ufw_permin  ufw_time_used  if minute2 <=10 
+replace ufw_permin = 0 if minute2 <=10   //these students should have been stopped early. They only attempted 10 questions, the early stop rule applies to these students
+
 
 *Passage Reading Score
 **********************
@@ -131,18 +297,36 @@ br rp1-rpsto1
 
 *Creating total_time used variable in seconds 
 tab rptim1  //5 students used 0 seconds which is imposible. these are students who were stopped early 
-br rp* if rptim1== 0  
+***Amy, I have made the changes below to address the above problem 
+******************************************************************
+sort rptim1
+br rptim1
+cap drop _rptim1
+gen _rptim1 = rptim1
+order _rptim1 , after(rptim1) 
+tostring _rptim1 , replace
+cap drop x
+gen x = strlen(_rptim1) 	
+cap drop y 
+gen y = substr(_rptim1,1,1) if strlen(_rptim1)==3
+destring y , replace
+replace y = y * 60 
 
+cap drop z
+gen z = substr(_rptim1,2,.) if strlen(_rptim1)==3
+destring z , replace
+cap drop rp_time_used
+gen rp_time_used = y+ z 
+replace rp_time_used = rptim1 if rp_time_used==. 
+order rp_time_used , after(ufwti1)
+
+drop x y z _rptim1
+tab rp_time_used
+
+*Early stop 
 tab rpsto1
-*Flag mistakes in early stop rule 
-cap drop I_stop_err_rp
-gen I_stop_err_rp = (rpsto1==1 & (rp1==0 |rp2== 0 | rp3==0 | rp4==0 | rp5==0 | rp6==0 | rp7 ==0 | rp8 ==0 | rp9==0 |rp10==0))
-lab var I_stop_err_rp "Incorrectly stopped early in Passage Reading Section" 
-order I_stop_err_rp , after(rpsto1) 
-tab  I_stop_err_rp rpsto1
+br rp* if rpsto1==1 //13 students were stopped early and should have a score of zero 
 
-br rp* if rpsto1==1 &  I_stop_err_rp==0  // 6 students who were correctly stopped early
-br rp* if rpsto1==1 &  I_stop_err_rp==1  // 7 students who were incorrectly stopped early
 
 *Creating a reading passage score 
 cap drop rp_string 
@@ -157,6 +341,34 @@ egen rpt_string = concat(trp1 trp2 trp3 trp4 trp5 trp6 trp7 trp8 trp9 trp10 trp1
 							trp68 trp69 trp70 trp71 trp72 trp73 trp74 trp75 trp76 trp77 trp78 trp79 trp80 )
 order  rpt_string , after(rp_string) 
 br rpt_string rp_string
+	*Cleaning time string variable. There should only be 2 stops: one at minute 1 and another one at minute 2
+	*********************************************************************************************************
+	cap drop timeerror
+	egen timeerror = noccur(rpt_string) , string(1) 
+	tab timeerror
+	br ufw* if timeerror==3  //observations with more than 2 stops 
+
+	*Creating an indicator for error in timed variable
+	/*
+	*Note: The following rules should always be followed 
+		1) Students who used less than 60secods should NOT have a "1" on their time string 
+		2) Students who fineshed the test between 60 seconds and 120 seconds shoul have ONE "1" 
+		3) Students who finished the test in 120 seconds should have 2 "1" 
+	*/
+
+	cap drop rp_timeerror 
+	gen rp_timeerror = ((rp_time_used < 60 & timeerror !=0) | (rp_time_used >=60  & rp_time_used <120 & timeerror !=1) | ( rp_time_used >= 120 & timeerror !=2)   ) 
+	tab rp_timeerror	
+	br rp* if rp_timeerror==1 
+	
+	*Amy, can you decide how you want to clean these variables?
+	***********************************************************
+	
+	/*We then need to change the time time string variable here to have at most 2 "1"
+		
+	
+	
+	*/
 
 cap drop rp_correct 
 egen rp_correct = noccur(rp_string) , string(0)  //counting the number of correct words student got for familiar word subtask
@@ -166,16 +378,59 @@ sort rp_correct
 *Estimating per minute score, 
 *Formula: (Total Correct / Time Used)*60
 cap drop rp_permin
-gen rp_permin = (rp_correct / rptim1) *60
+gen rp_permin = (rp_correct / rp_time_used) *60
 lab var rp_permin "Reading Passage"
 order rp_permin , after(rp_correct) 
 *replacing rp score for students who were incorrectly stopped 
-replace rp_permin = 0 if rpsto1==1 & I_stop_err_rp==0
-replace rp_correct = 0 if rpsto1==1 & I_stop_err_rp==0
-
-br rp* if rpsto1==1 &  I_stop_err_rp==0  // 6 students who were correctly stopped early
-br rp* if rpsto1==1 &  I_stop_err_rp==1  // 7 students who were incorrectly stopped early
+replace rp_permin = 0 if rpsto1==1 
+replace rp_correct = 0 if rpsto1==1
+br rp* if rpsto1==1 
  
+*Amy, I am fixing the issue with students who used the full 2 minutes to finish 
+*******************************************************************************
+br rp* if rp_time_used >=120
+	*Recalculating the scores of students who were stopped (students who used all of the 120 seconds allocated for the test) 
+	************************************************************************************************************************
+	*First, from time string, let's find the possition at which the second minute was marked 
+	/* Stata 14 only
+	cap drop minute2 
+	gen minute2 =  strrpos(rpt_string , "1") if rp_time_used >=120  //getting the item number of the last item attempted
+	tab minute2
+	*/
+	
+	*Stata 13 equivalent of the function strrpos 
+	cap drop minute2 
+	gen minute2 =  strlen(rpt_string)-strpos(strreverse(rpt_string),"1")+1  if rp_time_used >=120  //getting the item number of the last item attempted  
+	replace minute2= 0 if strpos(rpt_string,"1") ==0 // students who do not have a check on their time string when 2 minutes elapsed 
+		
+
+br rp* minute2 rp_time_used if rp_time_used >=120
+cap drop rp_string2
+gen rp_string2 = substr(rp_string, 1, minute2) if rp_time_used >=120
+order rp_string2 , after(rp_string) 
+*Counting the number of correct items for students who used 2 minutes
+********************************************************************
+cap drop rp_correct2
+egen rp_correct2 = noccur(rp_string2) , string(0)  //counting the number of correct words student got for familiar word subtask
+order rp_correct2 , after(rp_correct) 
+br rp_string rp_string2 minute2 rp_correct rp_correct2 rp_permin if rp_time_used >=120
+replace rp_permin = (rp_correct2 / rp_time_used) *60  if rp_time_used >=120  //replacing the per minute score for those students who used 2 minutes 
+
+*Amy, I am replacing to 0 the scores of students who took a full 2 minutes to finish the test but only attempted 10 questions at most 
+br rp_string rp_string2 minute2 rp_correct rp_correct2 rp_permin  if minute2 <=10 
+replace rp_permin = 0 if minute2 <=10   //these students should have been stopped early. They only attempted 10 questions, the early stop rule applies to these student
+
+
+
+*Creating an overal time error variable
+***************************************
+cap drop Overall_Any_Error
+gen Overall_Any_Error = (fw_timeerror==1 | ufw_timeerror==1 | rp_timeerror==1  )
+tab Overall_Any_Error
+sort fw_timeerror ufw_timeerror rp_timeerror 
+br fw_timeerror ufw_timeerror rp_timeerror  if  Overall_Any_Error==1
+
+
 
 *2) Percentage Score Variables
 ******************************  
@@ -200,7 +455,7 @@ foreach var of varlist  ov1-ov10 {
 *
 *Oroal vocal percentage correct 
 cap drop total_ov_correct
-egen total_ov_correct = rowtotal(ov1-ov10)
+egen total_ov_correct = rsum(ov1-ov10) , missing
 la var total_ov_correct "OV Score (0-10)"
 order total_ov_correct , after(ov10)
 sort total_ov_correct
@@ -234,8 +489,8 @@ foreach var of varlist rpc1-rpc5 {
 *
 
 *Reading comprehension socre 
-cap drop total_rpc_correct
-egen total_rpc_correct = rowtotal(rpc1-rpc5)
+cap drop total_rpc_correct 
+egen total_rpc_correct = rsum(rpc1-rpc5) , missing
 la var total_rpc_correct "RPC Score (0-5)"
 order total_rpc_correct , after(rpc5)
 sort total_rpc_correct
@@ -272,7 +527,7 @@ foreach var of varlist lc1-lc4 {
 
 *Listening comprehension socre 
 cap drop total_lc_correct
-egen total_lc_correct = rowtotal(lc1-lc4)
+egen total_lc_correct = rsum(lc1-lc4) , missing
 la var total_lc_correct "LC Score (0-4)"
 order total_lc_correct , after(lc4)
 sort total_lc_correct
@@ -292,7 +547,7 @@ tab dct1 , nol
 	
 *Dictation socre 
 cap drop total_dct_correct
-egen total_dct_correct = rowtotal(dct1-dct10)
+egen total_dct_correct = rsum(dct1-dct10) , missing
 la var total_dct_correct "DCT Score (0-20)"
 order total_dct_correct , after(dct10)
 sort total_dct_correct
@@ -307,14 +562,7 @@ la var dct_score "Dictation"
 ******************
 des  fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct_score 
 
-foreach var of varlist fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct_score {
-  egen `var'_sd = std(`var') 
-  sum `var'_sd, d 
-  replace `var' =. if `var'_sd>= 3 
-}
-*
 
-/*
 *Flag observations that are 3 Standard Deviation Away 
 foreach var of varlist   fw_permin ufw_permin rp_permin ov_score rpc_score lc_score dct_score  {
 	cap drop `var'_sd
@@ -324,19 +572,38 @@ foreach var of varlist   fw_permin ufw_permin rp_permin ov_score rpc_score lc_sc
 	order `var'_sd , after(`var') 
 	gen `var'_flag =(`var'_sd>= 3)
 	order `var'_flag , after(`var'_sd)
-	sum `var'_sd, d
 	tab `var'_flag
-	sum `var'_sd, d 
+	sum `var', d 
  }
  *
  cap drop sd_flags
  gen sd_flags=  fw_permin_flag+ ufw_permin_flag+ rp_permin_flag+ ov_score_flag +rpc_score_flag  + dct_score_flag+ lc_score_flag
  tab sd_flags  //20 outliers
  
- 
- 
-drop if sd_flags!=0   //20 outliers are dropped 
+*drop if sd_flags!=0   //20 outliers are dropped 
 
+/*
+foreach var of varlist fw_permin ufw_permin rp_permin  {
+  egen `var'_sd = std(`var') 
+  sum `var'_sd, d 
+  replace `var' =. if `var'_sd>= 3 
+}
+*
 */
+
+ *Fixing page split error in the Remark software where q32 is split into 2 questions 
+
+  *Amy solution: Delete q321; rename q322 to q32 
+ drop q321
+ rename q322 q32 
  
+ 
+*Dropping variables we don't need 
+ drop    fw_string fw_string2 fwt_string ufw_string ufw_string2 ufwt_string rp_string rp_string2 rpt_string
+ drop     fw_correct fw_correct2 ufw_correct ufw_correct2  total_ov_correct rp_correct rp_correct2  total_dct_correct 
+drop   fw_permin_sd ufw_permin_sd ov_score_sd rp_permin_sd rpc_score_sd lc_score_sd dct_score_sd sd_flags
+drop   fw_permin_flag ufw_permin_flag ov_score_flag rp_permin_flag rpc_score_flag lc_score_flag dct_score_flag
+drop total_rpc_correct total_lc_correct
+drop minute2
+
 
